@@ -119,7 +119,4 @@ CASM/
 └── README.md
 ```
 
-## License
-
-MIT
 
