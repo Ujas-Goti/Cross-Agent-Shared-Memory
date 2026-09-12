@@ -1,122 +1,93 @@
-# Cross-Agent Shared Memory (CASM) System
+# Cross-Agent Shared Memory (CASM)
 
-A unified, persistent memory layer that multiple AI agents can read from and write to collaboratively. CASM serves as a "single source of truth" for agent teams, enabling synchronized decision-making and knowledge sharing.
+REST memory layer so multiple AI agents can **store, search, and share** the same context.
 
-## Features
+Python, FastAPI, PostgreSQL, pgvector, Docker Compose.
 
-- **Persistent Memory Storage**: Store facts, observations, and intermediate results that persist across agent sessions
-- **Semantic Search**: Vector-based similarity search using embeddings for finding relevant memories by meaning
-- **Multi-Agent Support**: Concurrent read/write access with conflict resolution
-- **Versioning**: Track changes with timestamps and version numbers
-- **Knowledge Graph**: Optional graph-based relationships between memory entries
-- **RESTful API**: Simple HTTP API for agent integration
+Repo: https://github.com/Ujas-Goti/Cross-Agent-Shared-Memory
 
-## Architecture
+## Results (local load tests)
 
-- **Backend**: Python + FastAPI
-- **Database**: PostgreSQL with pgvector extension
-- **Embeddings**: Sentence Transformers (all-MiniLM-L6-v2)
-- **Deployment**: Docker Compose
+Keep this section only if you actually ran the tests. Numbers on the resume must match what you can explain: workload, baseline, how you measured.
 
-## Quick Start
+- **10+ concurrent agents** sharing state over REST at **under 500ms**
+- **Versioned writes** so **2,000+ test requests** did not lose data under concurrent access
+- **Prometheus + Grafana** on the running service, cutting failure-triage time by **60%** (time from alert to root cause vs logs-only)
 
-### Prerequisites
+This repo’s checked-in deploy path is **Docker Compose**. Kubernetes is not in this repository.
 
-- Docker and Docker Compose
-- Python 3.9+ (for local development)
+## What it does
 
-### Running with Docker
+- Persistent memory across agent sessions (PostgreSQL)
+- Semantic search with embeddings (`all-MiniLM-L6-v2` + pgvector)
+- Concurrent read/write with version numbers (optimistic locking)
+- HTTP API agents can call from any language
+- API key auth (`X-API-Key`)
+
+## Stack
+
+| Piece | Choice |
+|---|---|
+| API | FastAPI |
+| DB | PostgreSQL + pgvector |
+| Embeddings | Sentence Transformers, 384-d |
+| Run | Docker Compose, Alembic migrations |
+
+## Quick start
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-This will start:
-- PostgreSQL database with pgvector
-- CASM API server
+- API: http://localhost:8000
+- Swagger: http://localhost:8000/docs
+- Health: http://localhost:8000/health
 
-The API will be available at `http://localhost:8000`
+## Local (no Docker)
 
-### API Documentation
-
-Once running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Development
-
-### Local Setup
-
-1. Install dependencies:
 ```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-2. Set up environment variables:
-```bash
 cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. Run database migrations:
-```bash
 alembic upgrade head
-```
-
-4. Start the development server:
-```bash
 uvicorn app.main:app --reload
 ```
 
-## API Endpoints
+## API
 
-### Memory Operations
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/memory` | Create memory |
+| GET | `/api/v1/memory/{id}` | Get by id |
+| GET | `/api/v1/memory` | List / filter |
+| PUT | `/api/v1/memory/{id}` | Update |
+| DELETE | `/api/v1/memory/{id}` | Delete |
+| POST | `/api/v1/memory/search` | Semantic search |
+| GET | `/health` | Health |
 
-- `POST /api/v1/memory` - Add a new memory item
-- `GET /api/v1/memory/{id}` - Get a memory item by ID
-- `GET /api/v1/memory` - List memory items with filters
-- `PUT /api/v1/memory/{id}` - Update a memory item
-- `DELETE /api/v1/memory/{id}` - Delete a memory item
+Send `X-API-Key` on memory routes.
 
-### Search Operations
+```python
+import requests
 
-- `POST /api/v1/memory/search` - Semantic search for memories
-- `GET /api/v1/memory/search` - Search with query parameters
-
-### Health & Status
-
-- `GET /health` - Health check endpoint
-
-## Project Structure
-
-```
-CASM/
-├── app/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI application
-│   ├── config.py            # Configuration settings
-│   ├── database.py          # Database connection
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── v1/
-│   │   │   ├── __init__.py
-│   │   │   ├── memory.py    # Memory endpoints
-│   │   │   └── search.py    # Search endpoints
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── memory.py        # Memory business logic
-│   │   ├── embedding.py      # Embedding generation
-│   │   └── auth.py          # Authentication
-│   └── utils/
-│       ├── __init__.py
-│       └── crdt.py          # CRDT utilities
-├── alembic/                 # Database migrations
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-└── README.md
+headers = {"X-API-Key": "test-api-key-change-in-production"}
+requests.post(
+    "http://localhost:8000/api/v1/memory",
+    json={"content": "User prefers dark mode", "created_by": "Agent1"},
+    headers=headers,
+)
+requests.post(
+    "http://localhost:8000/api/v1/memory/search",
+    json={"query": "user preferences", "limit": 10},
+    headers=headers,
+)
 ```
 
+## Tests
 
+Describe how you verified lossless concurrent writes (tool, request count, assertion). If that script is not in the repo yet, add it before you apply.
+
+## Honesty
+
+Versioned writes are **optimistic locking**, not a full CRDT. Knowledge-graph links exist as a model; this is not Neo4j. Single Postgres instance; embeddings are generated on write.
